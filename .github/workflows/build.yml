@@ -1,20 +1,15 @@
-name: Build & Release
+name: Build JAR
 
 on:
   push:
     branches: [ main, master ]
-    tags:
-      - 'v*.*.*'
-  pull_request:
-    branches: [ main, master ]
 
 jobs:
   build:
-    name: Build Mod JAR
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
@@ -23,85 +18,16 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
+          gradle-version: '8.11'
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Build
+        run: gradle build --no-daemon
 
-      - name: Build with Gradle
-        run: ./gradlew build --no-daemon
-
-      - name: Upload JAR artifact
+      - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
           name: hudmod-jar
           path: build/libs/hudmod-*.jar
-          if-no-files-found: error
-
-  release:
-    name: Publish GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build JAR
-        run: ./gradlew build --no-daemon
-
-      - name: Get version from tag
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: "HudMod v${{ steps.get_version.outputs.VERSION }}"
-          tag_name: ${{ github.ref_name }}
-          body: |
-            ## HudMod v${{ steps.get_version.outputs.VERSION }}
-
-            ### Installation
-            1. Install Fabric Loader for Minecraft 1.21.4
-            2. Put Fabric API in your mods/ folder
-            3. Put hudmod.jar in your mods/ folder
-            4. Launch Minecraft 1.21.4
-
-            ### Default Keybind
-            Press H to open HUD Settings.
-          files: |
-            build/libs/hudmod-${{ steps.get_version.outputs.VERSION }}.jar
-          draft: false
-          prerelease: false
