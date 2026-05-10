@@ -1,1 +1,24 @@
-
+{
+  "schemaVersion": 1,
+  "id": "hudmod",
+  "version": "${version}",
+  "name": "HudMod",
+  "description": "Highly optimized, fully customizable HUD mod. Armor, held item, totem counter, drag editor. Built for PojavLauncher & low-end devices.",
+  "authors": ["HudMod"],
+  "contact": {
+    "sources": "https://github.com/example/hudmod"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.hudmod.HudMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.4",
+    "java": ">=21"
+  }
+}
