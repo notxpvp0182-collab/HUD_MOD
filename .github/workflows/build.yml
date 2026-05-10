@@ -1,1 +1,126 @@
+name: Build & Release
 
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*.*.*'        # triggers a GitHub Release when you push a tag like v1.0.0
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    name: Build Mod JAR
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Java 21 ───────────────────────────────────────────────────────────
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      # ── 3. Gradle cache (speeds up subsequent runs significantly) ────────────
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      # ── 4. Make gradlew executable ───────────────────────────────────────────
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # ── 5. Build ─────────────────────────────────────────────────────────────
+      - name: Build with Gradle
+        run: ./gradlew build --no-daemon
+        env:
+          JAVA_TOOL_OPTIONS: "-Xmx2G"
+
+      # ── 6. Upload artifact on every push (not just tags) ─────────────────────
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hudmod-jar
+          path: build/libs/hudmod-*.jar
+          if-no-files-found: error
+
+  # ── Release job (runs only on tag pushes like v1.0.0) ────────────────────────
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write     # needed to create releases
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build JAR
+        run: ./gradlew build --no-daemon
+        env:
+          JAVA_TOOL_OPTIONS: "-Xmx2G"
+
+      # Strip the leading 'v' from the tag to get the version number
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      # Create a GitHub Release and attach the built JAR
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "HudMod v${{ steps.get_version.outputs.VERSION }}"
+          tag_name: ${{ github.ref_name }}
+          body: |
+            ## HudMod v${{ steps.get_version.outputs.VERSION }}
+
+            ### Installation
+            1. Install [Fabric Loader](https://fabricmc.net/use/installer/) for Minecraft 1.21.4
+            2. Download [Fabric API](https://modrinth.com/mod/fabric-api) and place it in your `mods/` folder
+            3. Download `hudmod-${{ steps.get_version.outputs.VERSION }}.jar` below and place it in your `mods/` folder
+            4. Launch Minecraft 1.21.4
+
+            ### Requirements
+            - Minecraft 1.21.4
+            - Fabric Loader 0.16+
+            - Fabric API 0.110.0+
+            - Java 21
+
+            ### Default Keybind
+            Press **H** to open the HUD Settings screen.
+          files: |
+            build/libs/hudmod-${{ steps.get_version.outputs.VERSION }}.jar
+          draft: false
+          prerelease: false
