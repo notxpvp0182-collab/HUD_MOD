@@ -43,8 +43,6 @@ jobs:
       # ── 5. Build ─────────────────────────────────────────────────────────────
       - name: Build with Gradle
         run: ./gradlew build --no-daemon
-        env:
-          JAVA_TOOL_OPTIONS: "-Xmx2G"
 
       # ── 6. Upload artifact on every push (not just tags) ─────────────────────
       - name: Upload JAR artifact
