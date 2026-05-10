@@ -18,9 +18,6 @@
       "com.hudmod.HudMod"
     ]
   },
-  "mixins": [
-    "hudmod.mixins.json"
-  ],
   "depends": {
     "fabricloader": "*",
     "fabric-api": "*",
