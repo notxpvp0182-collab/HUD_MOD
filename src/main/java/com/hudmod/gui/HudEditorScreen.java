@@ -5,7 +5,9 @@ import com.hudmod.config.HudConfig;
 import com.hudmod.util.RenderUtil;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +17,6 @@ public class HudEditorScreen extends Screen {
     private static final int BG_OVERLAY  = 0xA0000000;
     private static final int PANEL_BG    = 0xE5202020;
     private static final int BTN_DEFAULT = 0xFF2C2C2C;
-    private static final int BTN_HOVER   = 0xFF3A3A3A;
     private static final int BTN_ACTIVE  = 0xFF27AE60;
     private static final int BTN_DANGER  = 0xFF922B21;
     private static final int TEXT_COLOR  = 0xFFEEEEEE;
@@ -37,9 +38,9 @@ public class HudEditorScreen extends Screen {
     }
 
     private final List<DragTarget> dragTargets = new ArrayList<>();
-    private DragTarget      dragging   = null;
-    private int             dragOffX   = 0;
-    private int             dragOffY   = 0;
+    private DragTarget       dragging  = null;
+    private int              dragOffX  = 0;
+    private int              dragOffY  = 0;
     private ElementPopupMenu popupMenu = null;
 
     private static final int BTN_ARMOR    = 0;
@@ -78,7 +79,6 @@ public class HudEditorScreen extends Screen {
     private void renderSettingsPanel(DrawContext ctx, int mouseX, int mouseY) {
         ctx.fill(0, 0, width, height, BG_OVERLAY);
 
-        // Extra space at bottom for credit line
         int panelH = PAD + 10 + PAD + BTN_TOTAL * ROW_H + PAD + ROW_H + PAD + 14;
         int px = (width  - PANEL_W) / 2;
         int py = (height - panelH)  / 2;
@@ -86,21 +86,20 @@ public class HudEditorScreen extends Screen {
         RenderUtil.drawRoundedRect(ctx, px, py, PANEL_W, panelH, 6, PANEL_BG);
         RenderUtil.drawBorder(ctx, px, py, PANEL_W, panelH, 0xFF444444);
 
-        // Title
         ctx.drawCenteredTextWithShadow(client.textRenderer,
             Text.literal("HUD Settings"), px + PANEL_W / 2, py + PAD, TITLE_COLOR);
 
         int ry = py + PAD + 12;
 
-        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "Armor HUD",       config.armorHudEnabled,        BTN_ARMOR);
-        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "  Helmet",        config.helmetEnabled,          BTN_HELMET);
-        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "  Chestplate",    config.chestplateEnabled,      BTN_CHEST);
-        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "  Leggings",      config.leggingsEnabled,        BTN_LEGS);
-        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "  Boots",         config.bootsEnabled,           BTN_BOOTS);
-        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "Held Item HUD",   config.heldItemEnabled,        BTN_HELD);
-        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "Totem Counter",   config.totemCounterEnabled,    BTN_TOTEM);
-        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "Durability Text", config.durabilityTextEnabled,  BTN_DUR_TEXT);
-        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "Durability Bar",  config.durabilityBarEnabled,   BTN_DUR_BAR);
+        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "Armor HUD",       config.armorHudEnabled,       BTN_ARMOR);
+        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "  Helmet",        config.helmetEnabled,         BTN_HELMET);
+        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "  Chestplate",    config.chestplateEnabled,     BTN_CHEST);
+        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "  Leggings",      config.leggingsEnabled,       BTN_LEGS);
+        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "  Boots",         config.bootsEnabled,          BTN_BOOTS);
+        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "Held Item HUD",   config.heldItemEnabled,       BTN_HELD);
+        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "Totem Counter",   config.totemCounterEnabled,   BTN_TOTEM);
+        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "Durability Text", config.durabilityTextEnabled, BTN_DUR_TEXT);
+        ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "Durability Bar",  config.durabilityBarEnabled,  BTN_DUR_BAR);
 
         ctx.fill(px + PAD, ry, px + PANEL_W - PAD, ry + 1, 0xFF444444);
         ry += 4;
@@ -109,17 +108,10 @@ public class HudEditorScreen extends Screen {
         ry = drawActionButton(ctx, mouseX, mouseY, px, ry, "Save",      BTN_SAVE,  BTN_ACTIVE);
         ry = drawActionButton(ctx, mouseX, mouseY, px, ry, "Reset All", BTN_RESET, BTN_DANGER);
 
-        // ── Separator above credit ────────────────────────────────────────────
         ctx.fill(px + PAD, ry + 2, px + PANEL_W - PAD, ry + 3, 0xFF333333);
-
-        // ── Credit ────────────────────────────────────────────────────────────
-        ctx.drawCenteredTextWithShadow(
-            client.textRenderer,
+        ctx.drawCenteredTextWithShadow(client.textRenderer,
             Text.literal("\u00a77Created by \u00a7bNoTXGameR"),
-            px + PANEL_W / 2,
-            ry + 6,
-            0xFFFFFFFF
-        );
+            px + PANEL_W / 2, ry + 6, 0xFFFFFFFF);
     }
 
     private int drawToggleRow(DrawContext ctx, int mouseX, int mouseY,
@@ -137,7 +129,6 @@ public class HudEditorScreen extends Screen {
         btnRects[btnIdx][1] = ry;
         btnRects[btnIdx][2] = PANEL_W;
         btnRects[btnIdx][3] = ROW_H - 1;
-
         return ry + ROW_H;
     }
 
@@ -147,9 +138,9 @@ public class HudEditorScreen extends Screen {
         int bx = px + PAD;
         int bw = PANEL_W - PAD * 2;
         RenderUtil.drawRoundedRect(ctx, bx, ry, bw, BTN_H, 4,
-                hover ? lighten(baseColor, 0x20) : baseColor);
+            hover ? lighten(baseColor, 0x20) : baseColor);
         ctx.drawCenteredTextWithShadow(client.textRenderer,
-                Text.literal(label), bx + bw / 2, ry + 3, TITLE_COLOR);
+            Text.literal(label), bx + bw / 2, ry + 3, TITLE_COLOR);
         btnRects[btnIdx][0] = bx;
         btnRects[btnIdx][1] = ry;
         btnRects[btnIdx][2] = bw;
@@ -165,40 +156,40 @@ public class HudEditorScreen extends Screen {
     private void renderEditMode(DrawContext ctx, int mouseX, int mouseY) {
         if (dragTargets.isEmpty()) buildDragTargets();
 
-        String msg = "Drag elements \u00b7 Right-click for options \u00b7 [ESC] to go back";
         ctx.drawCenteredTextWithShadow(client.textRenderer,
-            Text.literal("\u00a77" + msg), width / 2, 4, 0xFFFFFFFF);
+            Text.literal("\u00a77Drag elements \u00b7 Right-click for options \u00b7 [ESC] back"),
+            width / 2, 4, 0xFFFFFFFF);
 
         for (DragTarget t : dragTargets) {
             int ex = (int)(t.cfg.xFraction * width);
             int ey = (int)(t.cfg.yFraction * height);
             boolean hovered = mouseX >= ex && mouseX <= ex + t.boxW
                            && mouseY >= ey && mouseY <= ey + t.boxH;
-            int outline = hovered ? 0xFFFFFFFF : 0xFF4A90D9;
-            RenderUtil.drawBorder(ctx, ex - 1, ey - 1, t.boxW + 2, t.boxH + 2, outline);
+            RenderUtil.drawBorder(ctx, ex-1, ey-1, t.boxW+2, t.boxH+2,
+                hovered ? 0xFFFFFFFF : 0xFF4A90D9);
             ctx.drawText(client.textRenderer, t.label, ex, ey - 9, 0xFFCCCCCC, true);
         }
 
-        if (popupMenu != null) {
-            popupMenu.render(ctx, mouseX, mouseY);
-        }
+        if (popupMenu != null) popupMenu.render(ctx, mouseX, mouseY);
     }
 
     private void buildDragTargets() {
         dragTargets.clear();
-        String[] armorLabels = {"Helmet", "Chestplate", "Leggings", "Boots"};
-        ElementConfig[] armorCfgs = config.armorConfigs();
+        String[] labels = {"Helmet","Chestplate","Leggings","Boots"};
+        ElementConfig[] cfgs = config.armorConfigs();
         for (int i = 0; i < 4; i++) {
-            int bw = (int)((16 + 8 + (config.durabilityTextEnabled ? 36 : 0)) * armorCfgs[i].scale);
-            int bh = (int)((16 + 8 + (config.durabilityBarEnabled  ? 3  : 0)) * armorCfgs[i].scale);
-            dragTargets.add(new DragTarget(armorCfgs[i], armorLabels[i], bw, bh));
+            int bw = (int)((16+8+(config.durabilityTextEnabled?36:0))*cfgs[i].scale);
+            int bh = (int)((16+8+(config.durabilityBarEnabled?3:0))*cfgs[i].scale);
+            dragTargets.add(new DragTarget(cfgs[i], labels[i], bw, bh));
         }
-        dragTargets.add(new DragTarget(config.heldItem,      "Held Item",     80, 40));
-        dragTargets.add(new DragTarget(config.totemCounter,  "Totem Counter", 60, 28));
+        dragTargets.add(new DragTarget(config.heldItem,     "Held Item",     80, 40));
+        dragTargets.add(new DragTarget(config.totemCounter, "Totem Counter", 60, 28));
     }
 
+    // ── 1.21.10 Mouse API — modifiers parameter added ─────────────────────────
+
     @Override
-    public boolean mouseClicked(double mx, double my, int button) {
+    public boolean mouseClicked(double mx, double my, int button, int modifiers) {
         int x = (int) mx, y = (int) my;
 
         if (editMode) {
@@ -210,7 +201,7 @@ public class HudEditorScreen extends Screen {
                 for (DragTarget t : dragTargets) {
                     int ex = (int)(t.cfg.xFraction * width);
                     int ey = (int)(t.cfg.yFraction * height);
-                    if (x >= ex && x <= ex+t.boxW && y >= ey && y <= ey+t.boxH) {
+                    if (x>=ex && x<=ex+t.boxW && y>=ey && y<=ey+t.boxH) {
                         popupMenu = new ElementPopupMenu(x, y, t.label, t.cfg);
                         popupMenu.clampToScreen(width, height);
                         return true;
@@ -220,7 +211,7 @@ public class HudEditorScreen extends Screen {
                 for (DragTarget t : dragTargets) {
                     int ex = (int)(t.cfg.xFraction * width);
                     int ey = (int)(t.cfg.yFraction * height);
-                    if (x >= ex && x <= ex+t.boxW && y >= ey && y <= ey+t.boxH) {
+                    if (x>=ex && x<=ex+t.boxW && y>=ey && y<=ey+t.boxH) {
                         dragging = t;
                         dragOffX = x - ex;
                         dragOffY = y - ey;
@@ -236,52 +227,50 @@ public class HudEditorScreen extends Screen {
     }
 
     private void handleSettingsClick(int x, int y) {
-        if (isOverBtn(BTN_ARMOR,     x, y)) config.armorHudEnabled        = !config.armorHudEnabled;
-        if (isOverBtn(BTN_HELMET,    x, y)) config.helmetEnabled          = !config.helmetEnabled;
-        if (isOverBtn(BTN_CHEST,     x, y)) config.chestplateEnabled      = !config.chestplateEnabled;
-        if (isOverBtn(BTN_LEGS,      x, y)) config.leggingsEnabled        = !config.leggingsEnabled;
-        if (isOverBtn(BTN_BOOTS,     x, y)) config.bootsEnabled           = !config.bootsEnabled;
-        if (isOverBtn(BTN_HELD,      x, y)) config.heldItemEnabled        = !config.heldItemEnabled;
-        if (isOverBtn(BTN_TOTEM,     x, y)) config.totemCounterEnabled    = !config.totemCounterEnabled;
-        if (isOverBtn(BTN_DUR_TEXT,  x, y)) config.durabilityTextEnabled  = !config.durabilityTextEnabled;
-        if (isOverBtn(BTN_DUR_BAR,   x, y)) config.durabilityBarEnabled   = !config.durabilityBarEnabled;
+        if (isOverBtn(BTN_ARMOR,    x,y)) config.armorHudEnabled       = !config.armorHudEnabled;
+        if (isOverBtn(BTN_HELMET,   x,y)) config.helmetEnabled         = !config.helmetEnabled;
+        if (isOverBtn(BTN_CHEST,    x,y)) config.chestplateEnabled     = !config.chestplateEnabled;
+        if (isOverBtn(BTN_LEGS,     x,y)) config.leggingsEnabled       = !config.leggingsEnabled;
+        if (isOverBtn(BTN_BOOTS,    x,y)) config.bootsEnabled          = !config.bootsEnabled;
+        if (isOverBtn(BTN_HELD,     x,y)) config.heldItemEnabled       = !config.heldItemEnabled;
+        if (isOverBtn(BTN_TOTEM,    x,y)) config.totemCounterEnabled   = !config.totemCounterEnabled;
+        if (isOverBtn(BTN_DUR_TEXT, x,y)) config.durabilityTextEnabled = !config.durabilityTextEnabled;
+        if (isOverBtn(BTN_DUR_BAR,  x,y)) config.durabilityBarEnabled  = !config.durabilityBarEnabled;
 
-        if (isOverBtn(BTN_EDIT,  x, y)) {
-            editMode = true;
-            dragTargets.clear();
-        }
-        if (isOverBtn(BTN_SAVE,  x, y)) { config.save(); close(); }
-        if (isOverBtn(BTN_RESET, x, y)) { config.resetToDefaults(); }
+        if (isOverBtn(BTN_EDIT,  x,y)) { editMode = true; dragTargets.clear(); }
+        if (isOverBtn(BTN_SAVE,  x,y)) { config.save(); close(); }
+        if (isOverBtn(BTN_RESET, x,y)) { config.resetToDefaults(); }
     }
 
     @Override
-    public boolean mouseDragged(double mx, double my, int button, double dX, double dY) {
+    public boolean mouseDragged(double mx, double my, int button, double dX, double dY, int modifiers) {
         int x = (int) mx, y = (int) my;
         if (popupMenu != null && popupMenu.mouseDragged(x, y, button)) return true;
         if (dragging != null) {
-            dragging.cfg.xFraction = Math.max(0f, Math.min(1f, (float)(x - dragOffX) / width));
-            dragging.cfg.yFraction = Math.max(0f, Math.min(1f, (float)(y - dragOffY) / height));
+            dragging.cfg.xFraction = Math.max(0f, Math.min(1f, (float)(x-dragOffX)/width));
+            dragging.cfg.yFraction = Math.max(0f, Math.min(1f, (float)(y-dragOffY)/height));
             return true;
         }
         return false;
     }
 
     @Override
-    public boolean mouseReleased(double mx, double my, int button) {
+    public boolean mouseReleased(double mx, double my, int button, int modifiers) {
         dragging = null;
         if (popupMenu != null) popupMenu.mouseReleased();
         return true;
     }
 
+    // ── 1.21.10 — keyPressed now takes KeyInput ───────────────────────────────
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256 && editMode) {
+    public boolean keyPressed(KeyInput input) {
+        if (input.keyCode() == GLFW.GLFW_KEY_ESCAPE && editMode) {
             editMode  = false;
             popupMenu = null;
             dragTargets.clear();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(input);
     }
 
     @Override
@@ -291,9 +280,9 @@ public class HudEditorScreen extends Screen {
     }
 
     private static int lighten(int argb, int amount) {
-        int r = Math.min(255, ((argb >> 16) & 0xFF) + amount);
-        int g = Math.min(255, ((argb >>  8) & 0xFF) + amount);
-        int b = Math.min(255, ( argb        & 0xFF) + amount);
-        return (argb & 0xFF000000) | (r << 16) | (g << 8) | b;
+        int r = Math.min(255, ((argb>>16)&0xFF)+amount);
+        int g = Math.min(255, ((argb>> 8)&0xFF)+amount);
+        int b = Math.min(255, ( argb     &0xFF)+amount);
+        return (argb&0xFF000000)|(r<<16)|(g<<8)|b;
     }
     }
