@@ -3,18 +3,24 @@
   "id": "hudmod",
   "version": "${version}",
   "name": "HudMod",
-  "description": "Highly optimized, fully customizable HUD mod. Armor, held item, totem counter, drag editor. Built for PojavLauncher & low-end devices.",
-  "authors": ["HudMod"],
+  "description": "Mod created by NoTXGameR — Optimized HUD mod for PojavLauncher & low-end devices.",
+  "authors": [
+    "NoTXGameR"
+  ],
   "contact": {
-    "sources": "https://github.com/example/hudmod"
+    "sources": "https://github.com/notxgamer/hudmod"
   },
   "license": "MIT",
+  "icon": "assets/hudmod/icon.png",
   "environment": "client",
   "entrypoints": {
     "client": [
       "com.hudmod.HudMod"
     ]
   },
+  "mixins": [
+    "hudmod.mixins.json"
+  ],
   "depends": {
     "fabricloader": "*",
     "fabric-api": "*",
