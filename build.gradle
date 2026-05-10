@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.9-SNAPSHOT'
+    id 'fabric-loom' version '1.11-SNAPSHOT'
     id 'java'
 }
 
@@ -37,7 +37,6 @@ tasks.withType(JavaCompile).configureEach {
 
 processResources {
     inputs.property "version", project.version
-
     filesMatching("fabric.mod.json") {
         expand "version": project.version
     }
