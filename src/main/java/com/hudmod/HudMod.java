@@ -61,7 +61,7 @@ public class HudMod implements ClientModInitializer {
 
         // 4. Register HUD render callback (runs every frame, client-side)
         HudRenderCallback.EVENT.register((drawContext, tickCounter) ->
-    RENDERER.render(drawContext, tickCounter.getTickDelta(true)));
+    RENDERER.render(drawContext, 0f));
 
         // 5. Keybind (default: H)
         openEditorKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
