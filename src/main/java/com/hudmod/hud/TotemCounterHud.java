@@ -50,12 +50,13 @@ public class TotemCounterHud {
         int sPad  = (int) (PAD  * scale);
         int sIcon = (int) (ICON * scale);
 
+        // 1.21.10 — Matrix3x2fStack
         ItemStack totemStack = new ItemStack(Items.TOTEM_OF_UNDYING);
-        ctx.getMatrices().push();
-        ctx.getMatrices().translate(x + sPad, y + sPad, 0.0);
-        ctx.getMatrices().scale(scale, scale, 1f);
+        ctx.getMatrices().pushMatrix();
+        ctx.getMatrices().translate(x + sPad, y + sPad);
+        ctx.getMatrices().scale(scale, scale);
         ctx.drawItem(totemStack, 0, 0);
-        ctx.getMatrices().pop();
+        ctx.getMatrices().popMatrix();
 
         int textColor;
         if (cachedCount == 0) {
@@ -65,22 +66,18 @@ public class TotemCounterHud {
             textColor = RenderUtil.applyOpacity(cfg.textColor, cfg.opacity);
         }
 
-        String text = "\u00d7" + cachedCount;
-        ctx.drawText(mc.textRenderer, text,
+        ctx.drawText(mc.textRenderer, "\u00d7" + cachedCount,
                 x + sPad + sIcon + 2,
                 y + sPad + sIcon / 2 - 4,
                 textColor, true);
     }
 
-    // ── FIX: শুধু একবার loop করো — inventory.size() সব slot cover করে ──
     private static int countTotems(MinecraftClient mc) {
         int count = 0;
-        // getInventory().size() = 36 main + 4 armor + 1 offhand = 41
-        // এতে main hand ও offhand সব include আছে — আলাদা count দরকার নেই
         for (int i = 0; i < mc.player.getInventory().size(); i++) {
             ItemStack s = mc.player.getInventory().getStack(i);
             if (s.isOf(Items.TOTEM_OF_UNDYING)) count += s.getCount();
         }
         return count;
     }
-                        }
+            }
