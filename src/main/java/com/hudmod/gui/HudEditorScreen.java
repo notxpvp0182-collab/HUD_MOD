@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
+import net.minecraft.util.ActionResult;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -70,45 +71,41 @@ public class HudEditorScreen extends Screen {
     @Override
     public boolean shouldPause() { return false; }
 
-    // ── Register Fabric screen events instead of overriding Screen methods ────
+    // ── 1.21.10: Fabric screen events return ActionResult, not boolean ─────────
     @Override
     protected void init() {
         super.init();
 
-        // Mouse click
         ScreenMouseEvents.allowMouseClick(this).register(
             (screen, mouseX, mouseY, button) -> {
                 onMouseClick((int) mouseX, (int) mouseY, button);
-                return true;
+                return ActionResult.PASS;
             }
         );
 
-        // Mouse drag
         ScreenMouseEvents.allowMouseDrag(this).register(
             (screen, mouseX, mouseY, button, deltaX, deltaY) -> {
                 onMouseDrag((int) mouseX, (int) mouseY, button);
-                return true;
+                return ActionResult.PASS;
             }
         );
 
-        // Mouse release
         ScreenMouseEvents.allowMouseRelease(this).register(
             (screen, mouseX, mouseY, button) -> {
                 onMouseRelease();
-                return true;
+                return ActionResult.PASS;
             }
         );
 
-        // Key press
         ScreenKeyboardEvents.allowKeyPress(this).register(
             (screen, key, scancode, modifiers) -> {
                 if (key == GLFW.GLFW_KEY_ESCAPE && editMode) {
                     editMode  = false;
                     popupMenu = null;
                     dragTargets.clear();
-                    return false; // false = consume, don't close screen
+                    return ActionResult.FAIL; // consume — don't close screen
                 }
-                return true;
+                return ActionResult.PASS;
             }
         );
     }
@@ -234,7 +231,7 @@ public class HudEditorScreen extends Screen {
         dragTargets.add(new DragTarget(config.totemCounter, "Totem Counter", 60, 28));
     }
 
-    // ── Internal mouse/key handlers called by Fabric events ──────────────────
+    // ── Internal handlers ─────────────────────────────────────────────────────
 
     private void onMouseClick(int x, int y, int button) {
         if (editMode) {
@@ -310,4 +307,4 @@ public class HudEditorScreen extends Screen {
         int b = Math.min(255, ( argb     &0xFF)+amount);
         return (argb&0xFF000000)|(r<<16)|(g<<8)|b;
     }
-}
+    }
