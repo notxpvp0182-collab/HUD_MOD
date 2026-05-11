@@ -3,17 +3,19 @@ package com.hudmod.gui;
 import com.hudmod.config.ElementConfig;
 import com.hudmod.config.HudConfig;
 import com.hudmod.util.RenderUtil;
-import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
-import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * HUD Editor Screen.
+ * Uses direct GLFW polling for all input — no Screen mouse/keyboard
+ * overrides, no Fabric ScreenMouseEvents. Works on any MC/Fabric version.
+ */
 public class HudEditorScreen extends Screen {
 
     private static final int BG_OVERLAY  = 0xA0000000;
@@ -33,9 +35,7 @@ public class HudEditorScreen extends Screen {
     private boolean editMode = false;
 
     private static final class DragTarget {
-        ElementConfig cfg;
-        String        label;
-        int           boxW, boxH;
+        ElementConfig cfg; String label; int boxW, boxH;
         DragTarget(ElementConfig c, String l, int w, int h) {
             cfg=c; label=l; boxW=w; boxH=h;
         }
@@ -47,6 +47,7 @@ public class HudEditorScreen extends Screen {
     private int              dragOffY  = 0;
     private ElementPopupMenu popupMenu = null;
 
+    // Button hit-rect indices
     private static final int BTN_ARMOR    = 0;
     private static final int BTN_HELMET   = 1;
     private static final int BTN_CHEST    = 2;
@@ -63,6 +64,11 @@ public class HudEditorScreen extends Screen {
 
     private final int[][] btnRects = new int[BTN_TOTAL][4];
 
+    // GLFW state from previous frame — used for edge detection
+    private boolean prevLeft  = false;
+    private boolean prevRight = false;
+    private boolean prevEsc   = false;
+
     public HudEditorScreen(HudConfig config) {
         super(Text.literal("HUD Settings"));
         this.config = config;
@@ -71,55 +77,74 @@ public class HudEditorScreen extends Screen {
     @Override
     public boolean shouldPause() { return false; }
 
-    // ── 1.21.10: Fabric screen events return ActionResult, not boolean ─────────
-    @Override
-    protected void init() {
-        super.init();
-
-        ScreenMouseEvents.allowMouseClick(this).register(
-            (screen, mouseX, mouseY, button) -> {
-                onMouseClick((int) mouseX, (int) mouseY, button);
-                return ActionResult.PASS;
-            }
-        );
-
-        ScreenMouseEvents.allowMouseDrag(this).register(
-            (screen, mouseX, mouseY, button, deltaX, deltaY) -> {
-                onMouseDrag((int) mouseX, (int) mouseY, button);
-                return ActionResult.PASS;
-            }
-        );
-
-        ScreenMouseEvents.allowMouseRelease(this).register(
-            (screen, mouseX, mouseY, button) -> {
-                onMouseRelease();
-                return ActionResult.PASS;
-            }
-        );
-
-        ScreenKeyboardEvents.allowKeyPress(this).register(
-            (screen, key, scancode, modifiers) -> {
-                if (key == GLFW.GLFW_KEY_ESCAPE && editMode) {
-                    editMode  = false;
-                    popupMenu = null;
-                    dragTargets.clear();
-                    return ActionResult.FAIL; // consume — don't close screen
-                }
-                return ActionResult.PASS;
-            }
-        );
-    }
-
-    // ── Rendering ─────────────────────────────────────────────────────────────
-
+    // ── Main render — also handles all input via GLFW polling ─────────────────
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        long win = client.getWindow().getHandle();
+
+        // Sample current GLFW state
+        boolean left  = GLFW.glfwGetMouseButton(win, GLFW.GLFW_MOUSE_BUTTON_LEFT)  == GLFW.GLFW_PRESS;
+        boolean right = GLFW.glfwGetMouseButton(win, GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
+        boolean esc   = GLFW.glfwGetKey(win, GLFW.GLFW_KEY_ESCAPE) == GLFW.GLFW_PRESS;
+
+        // Rising-edge detection
+        boolean leftClick   = left  && !prevLeft;
+        boolean leftRelease = !left && prevLeft;
+        boolean rightClick  = right && !prevRight;
+        boolean escPress    = esc   && !prevEsc;
+
+        // ── Edit mode input ───────────────────────────────────────────────────
         if (editMode) {
+            if (escPress) {
+                editMode  = false;
+                popupMenu = null;
+                dragTargets.clear();
+            } else {
+                // Popup drag
+                if (popupMenu != null && left) popupMenu.mouseDragged(mouseX, mouseY, 0);
+                if (leftRelease && popupMenu != null) popupMenu.mouseReleased();
+
+                // Left click — start drag or close popup
+                if (leftClick) {
+                    if (popupMenu != null) {
+                        if (!popupMenu.isOver(mouseX, mouseY)) popupMenu = null;
+                        else { popupMenu.mouseClicked(mouseX, mouseY, 0); }
+                    } else {
+                        startDrag(mouseX, mouseY);
+                    }
+                }
+
+                // Right click — open popup
+                if (rightClick && popupMenu == null) {
+                    openPopup(mouseX, mouseY);
+                }
+
+                // Dragging
+                if (left && dragging != null) {
+                    dragging.cfg.xFraction = Math.max(0f, Math.min(1f,
+                        (float)(mouseX - dragOffX) / width));
+                    dragging.cfg.yFraction = Math.max(0f, Math.min(1f,
+                        (float)(mouseY - dragOffY) / height));
+                }
+                if (leftRelease) dragging = null;
+            }
+
+            if (dragTargets.isEmpty()) buildDragTargets();
             renderEditMode(ctx, mouseX, mouseY);
+
+        // ── Settings mode input ───────────────────────────────────────────────
         } else {
+            if (leftClick) handleSettingsClick(mouseX, mouseY);
             renderSettingsPanel(ctx, mouseX, mouseY);
         }
+
+        // Store state for next frame
+        prevLeft  = left;
+        prevRight = right;
+        prevEsc   = esc;
     }
+
+    // ── Settings panel ────────────────────────────────────────────────────────
 
     private void renderSettingsPanel(DrawContext ctx, int mouseX, int mouseY) {
         ctx.fill(0, 0, width, height, BG_OVERLAY);
@@ -135,7 +160,6 @@ public class HudEditorScreen extends Screen {
             Text.literal("HUD Settings"), px + PANEL_W / 2, py + PAD, TITLE_COLOR);
 
         int ry = py + PAD + 12;
-
         ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "Armor HUD",       config.armorHudEnabled,       BTN_ARMOR);
         ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "  Helmet",        config.helmetEnabled,         BTN_HELMET);
         ry = drawToggleRow(ctx, mouseX, mouseY, px, ry, "  Chestplate",    config.chestplateEnabled,     BTN_CHEST);
@@ -164,43 +188,51 @@ public class HudEditorScreen extends Screen {
         boolean hover = isOverBtn(btnIdx, mouseX, mouseY);
         ctx.fill(px+1, ry, px+PANEL_W-1, ry+ROW_H-1, hover ? 0x20FFFFFF : 0);
         ctx.drawText(client.textRenderer, label, px+PAD, ry+4, TEXT_COLOR, false);
-
         int tx = px + PANEL_W - PAD - 28;
         int ty = ry + (ROW_H - 8) / 2;
         ctx.fill(tx, ty, tx+28, ty+8, state ? 0xFF27AE60 : 0xFF555555);
         ctx.fill(state ? tx+20 : tx, ty, state ? tx+28 : tx+8, ty+8, 0xFFFFFFFF);
-
-        btnRects[btnIdx][0] = px;
-        btnRects[btnIdx][1] = ry;
-        btnRects[btnIdx][2] = PANEL_W;
-        btnRects[btnIdx][3] = ROW_H - 1;
+        btnRects[btnIdx][0]=px; btnRects[btnIdx][1]=ry;
+        btnRects[btnIdx][2]=PANEL_W; btnRects[btnIdx][3]=ROW_H-1;
         return ry + ROW_H;
     }
 
     private int drawActionButton(DrawContext ctx, int mouseX, int mouseY,
                                  int px, int ry, String label, int btnIdx, int baseColor) {
         boolean hover = isOverBtn(btnIdx, mouseX, mouseY);
-        int bx = px + PAD;
-        int bw = PANEL_W - PAD * 2;
+        int bx = px + PAD, bw = PANEL_W - PAD * 2;
         RenderUtil.drawRoundedRect(ctx, bx, ry, bw, BTN_H, 4,
             hover ? lighten(baseColor, 0x20) : baseColor);
         ctx.drawCenteredTextWithShadow(client.textRenderer,
             Text.literal(label), bx + bw/2, ry+3, TITLE_COLOR);
-        btnRects[btnIdx][0] = bx;
-        btnRects[btnIdx][1] = ry;
-        btnRects[btnIdx][2] = bw;
-        btnRects[btnIdx][3] = BTN_H;
+        btnRects[btnIdx][0]=bx; btnRects[btnIdx][1]=ry;
+        btnRects[btnIdx][2]=bw; btnRects[btnIdx][3]=BTN_H;
         return ry + BTN_H + 3;
     }
 
     private boolean isOverBtn(int idx, int mx, int my) {
         int[] r = btnRects[idx];
-        return mx >= r[0] && mx <= r[0]+r[2] && my >= r[1] && my <= r[1]+r[3];
+        return mx>=r[0] && mx<=r[0]+r[2] && my>=r[1] && my<=r[1]+r[3];
     }
 
-    private void renderEditMode(DrawContext ctx, int mouseX, int mouseY) {
-        if (dragTargets.isEmpty()) buildDragTargets();
+    private void handleSettingsClick(int x, int y) {
+        if (isOverBtn(BTN_ARMOR,    x,y)) config.armorHudEnabled       = !config.armorHudEnabled;
+        if (isOverBtn(BTN_HELMET,   x,y)) config.helmetEnabled         = !config.helmetEnabled;
+        if (isOverBtn(BTN_CHEST,    x,y)) config.chestplateEnabled     = !config.chestplateEnabled;
+        if (isOverBtn(BTN_LEGS,     x,y)) config.leggingsEnabled       = !config.leggingsEnabled;
+        if (isOverBtn(BTN_BOOTS,    x,y)) config.bootsEnabled          = !config.bootsEnabled;
+        if (isOverBtn(BTN_HELD,     x,y)) config.heldItemEnabled       = !config.heldItemEnabled;
+        if (isOverBtn(BTN_TOTEM,    x,y)) config.totemCounterEnabled   = !config.totemCounterEnabled;
+        if (isOverBtn(BTN_DUR_TEXT, x,y)) config.durabilityTextEnabled = !config.durabilityTextEnabled;
+        if (isOverBtn(BTN_DUR_BAR,  x,y)) config.durabilityBarEnabled  = !config.durabilityBarEnabled;
+        if (isOverBtn(BTN_EDIT,  x,y)) { editMode = true; dragTargets.clear(); }
+        if (isOverBtn(BTN_SAVE,  x,y)) { config.save(); close(); }
+        if (isOverBtn(BTN_RESET, x,y)) { config.resetToDefaults(); }
+    }
 
+    // ── Edit mode ─────────────────────────────────────────────────────────────
+
+    private void renderEditMode(DrawContext ctx, int mouseX, int mouseY) {
         ctx.drawCenteredTextWithShadow(client.textRenderer,
             Text.literal("\u00a77Drag \u00b7 Right-click options \u00b7 ESC back"),
             width/2, 4, 0xFFFFFFFF);
@@ -231,68 +263,29 @@ public class HudEditorScreen extends Screen {
         dragTargets.add(new DragTarget(config.totemCounter, "Totem Counter", 60, 28));
     }
 
-    // ── Internal handlers ─────────────────────────────────────────────────────
-
-    private void onMouseClick(int x, int y, int button) {
-        if (editMode) {
-            if (popupMenu != null) {
-                if (popupMenu.mouseClicked(x, y, button)) return;
-                if (!popupMenu.isOver(x, y)) popupMenu = null;
+    private void startDrag(int x, int y) {
+        for (DragTarget t : dragTargets) {
+            int ex = (int)(t.cfg.xFraction * width);
+            int ey = (int)(t.cfg.yFraction * height);
+            if (x>=ex && x<=ex+t.boxW && y>=ey && y<=ey+t.boxH) {
+                dragging = t;
+                dragOffX = x - ex;
+                dragOffY = y - ey;
+                return;
             }
-            if (button == 1) {
-                for (DragTarget t : dragTargets) {
-                    int ex = (int)(t.cfg.xFraction * width);
-                    int ey = (int)(t.cfg.yFraction * height);
-                    if (x>=ex && x<=ex+t.boxW && y>=ey && y<=ey+t.boxH) {
-                        popupMenu = new ElementPopupMenu(x, y, t.label, t.cfg);
-                        popupMenu.clampToScreen(width, height);
-                        return;
-                    }
-                }
-            } else if (button == 0) {
-                for (DragTarget t : dragTargets) {
-                    int ex = (int)(t.cfg.xFraction * width);
-                    int ey = (int)(t.cfg.yFraction * height);
-                    if (x>=ex && x<=ex+t.boxW && y>=ey && y<=ey+t.boxH) {
-                        dragging = t;
-                        dragOffX = x - ex;
-                        dragOffY = y - ey;
-                        return;
-                    }
-                }
-            }
-            return;
-        }
-        handleSettingsClick(x, y);
-    }
-
-    private void handleSettingsClick(int x, int y) {
-        if (isOverBtn(BTN_ARMOR,    x,y)) config.armorHudEnabled       = !config.armorHudEnabled;
-        if (isOverBtn(BTN_HELMET,   x,y)) config.helmetEnabled         = !config.helmetEnabled;
-        if (isOverBtn(BTN_CHEST,    x,y)) config.chestplateEnabled     = !config.chestplateEnabled;
-        if (isOverBtn(BTN_LEGS,     x,y)) config.leggingsEnabled       = !config.leggingsEnabled;
-        if (isOverBtn(BTN_BOOTS,    x,y)) config.bootsEnabled          = !config.bootsEnabled;
-        if (isOverBtn(BTN_HELD,     x,y)) config.heldItemEnabled       = !config.heldItemEnabled;
-        if (isOverBtn(BTN_TOTEM,    x,y)) config.totemCounterEnabled   = !config.totemCounterEnabled;
-        if (isOverBtn(BTN_DUR_TEXT, x,y)) config.durabilityTextEnabled = !config.durabilityTextEnabled;
-        if (isOverBtn(BTN_DUR_BAR,  x,y)) config.durabilityBarEnabled  = !config.durabilityBarEnabled;
-
-        if (isOverBtn(BTN_EDIT,  x,y)) { editMode = true; dragTargets.clear(); }
-        if (isOverBtn(BTN_SAVE,  x,y)) { config.save(); close(); }
-        if (isOverBtn(BTN_RESET, x,y)) { config.resetToDefaults(); }
-    }
-
-    private void onMouseDrag(int x, int y, int button) {
-        if (popupMenu != null && popupMenu.mouseDragged(x, y, button)) return;
-        if (dragging != null) {
-            dragging.cfg.xFraction = Math.max(0f, Math.min(1f, (float)(x-dragOffX)/width));
-            dragging.cfg.yFraction = Math.max(0f, Math.min(1f, (float)(y-dragOffY)/height));
         }
     }
 
-    private void onMouseRelease() {
-        dragging = null;
-        if (popupMenu != null) popupMenu.mouseReleased();
+    private void openPopup(int x, int y) {
+        for (DragTarget t : dragTargets) {
+            int ex = (int)(t.cfg.xFraction * width);
+            int ey = (int)(t.cfg.yFraction * height);
+            if (x>=ex && x<=ex+t.boxW && y>=ey && y<=ey+t.boxH) {
+                popupMenu = new ElementPopupMenu(x, y, t.label, t.cfg);
+                popupMenu.clampToScreen(width, height);
+                return;
+            }
+        }
     }
 
     @Override
