@@ -3,9 +3,10 @@ package com.hudmod.gui;
 import com.hudmod.config.ElementConfig;
 import com.hudmod.config.HudConfig;
 import com.hudmod.util.RenderUtil;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
@@ -34,7 +35,9 @@ public class HudEditorScreen extends Screen {
         ElementConfig cfg;
         String        label;
         int           boxW, boxH;
-        DragTarget(ElementConfig c, String l, int w, int h) { cfg=c; label=l; boxW=w; boxH=h; }
+        DragTarget(ElementConfig c, String l, int w, int h) {
+            cfg=c; label=l; boxW=w; boxH=h;
+        }
     }
 
     private final List<DragTarget> dragTargets = new ArrayList<>();
@@ -66,6 +69,51 @@ public class HudEditorScreen extends Screen {
 
     @Override
     public boolean shouldPause() { return false; }
+
+    // ── Register Fabric screen events instead of overriding Screen methods ────
+    @Override
+    protected void init() {
+        super.init();
+
+        // Mouse click
+        ScreenMouseEvents.allowMouseClick(this).register(
+            (screen, mouseX, mouseY, button) -> {
+                onMouseClick((int) mouseX, (int) mouseY, button);
+                return true;
+            }
+        );
+
+        // Mouse drag
+        ScreenMouseEvents.allowMouseDrag(this).register(
+            (screen, mouseX, mouseY, button, deltaX, deltaY) -> {
+                onMouseDrag((int) mouseX, (int) mouseY, button);
+                return true;
+            }
+        );
+
+        // Mouse release
+        ScreenMouseEvents.allowMouseRelease(this).register(
+            (screen, mouseX, mouseY, button) -> {
+                onMouseRelease();
+                return true;
+            }
+        );
+
+        // Key press
+        ScreenKeyboardEvents.allowKeyPress(this).register(
+            (screen, key, scancode, modifiers) -> {
+                if (key == GLFW.GLFW_KEY_ESCAPE && editMode) {
+                    editMode  = false;
+                    popupMenu = null;
+                    dragTargets.clear();
+                    return false; // false = consume, don't close screen
+                }
+                return true;
+            }
+        );
+    }
+
+    // ── Rendering ─────────────────────────────────────────────────────────────
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
@@ -117,13 +165,13 @@ public class HudEditorScreen extends Screen {
     private int drawToggleRow(DrawContext ctx, int mouseX, int mouseY,
                               int px, int ry, String label, boolean state, int btnIdx) {
         boolean hover = isOverBtn(btnIdx, mouseX, mouseY);
-        ctx.fill(px + 1, ry, px + PANEL_W - 1, ry + ROW_H - 1, hover ? 0x20FFFFFF : 0);
-        ctx.drawText(client.textRenderer, label, px + PAD, ry + 4, TEXT_COLOR, false);
+        ctx.fill(px+1, ry, px+PANEL_W-1, ry+ROW_H-1, hover ? 0x20FFFFFF : 0);
+        ctx.drawText(client.textRenderer, label, px+PAD, ry+4, TEXT_COLOR, false);
 
         int tx = px + PANEL_W - PAD - 28;
         int ty = ry + (ROW_H - 8) / 2;
-        ctx.fill(tx, ty, tx + 28, ty + 8, state ? 0xFF27AE60 : 0xFF555555);
-        ctx.fill(state ? tx + 20 : tx, ty, state ? tx + 28 : tx + 8, ty + 8, 0xFFFFFFFF);
+        ctx.fill(tx, ty, tx+28, ty+8, state ? 0xFF27AE60 : 0xFF555555);
+        ctx.fill(state ? tx+20 : tx, ty, state ? tx+28 : tx+8, ty+8, 0xFFFFFFFF);
 
         btnRects[btnIdx][0] = px;
         btnRects[btnIdx][1] = ry;
@@ -140,7 +188,7 @@ public class HudEditorScreen extends Screen {
         RenderUtil.drawRoundedRect(ctx, bx, ry, bw, BTN_H, 4,
             hover ? lighten(baseColor, 0x20) : baseColor);
         ctx.drawCenteredTextWithShadow(client.textRenderer,
-            Text.literal(label), bx + bw / 2, ry + 3, TITLE_COLOR);
+            Text.literal(label), bx + bw/2, ry+3, TITLE_COLOR);
         btnRects[btnIdx][0] = bx;
         btnRects[btnIdx][1] = ry;
         btnRects[btnIdx][2] = bw;
@@ -157,17 +205,17 @@ public class HudEditorScreen extends Screen {
         if (dragTargets.isEmpty()) buildDragTargets();
 
         ctx.drawCenteredTextWithShadow(client.textRenderer,
-            Text.literal("\u00a77Drag elements \u00b7 Right-click for options \u00b7 [ESC] back"),
-            width / 2, 4, 0xFFFFFFFF);
+            Text.literal("\u00a77Drag \u00b7 Right-click options \u00b7 ESC back"),
+            width/2, 4, 0xFFFFFFFF);
 
         for (DragTarget t : dragTargets) {
             int ex = (int)(t.cfg.xFraction * width);
             int ey = (int)(t.cfg.yFraction * height);
-            boolean hovered = mouseX >= ex && mouseX <= ex + t.boxW
-                           && mouseY >= ey && mouseY <= ey + t.boxH;
+            boolean hovered = mouseX>=ex && mouseX<=ex+t.boxW
+                           && mouseY>=ey && mouseY<=ey+t.boxH;
             RenderUtil.drawBorder(ctx, ex-1, ey-1, t.boxW+2, t.boxH+2,
                 hovered ? 0xFFFFFFFF : 0xFF4A90D9);
-            ctx.drawText(client.textRenderer, t.label, ex, ey - 9, 0xFFCCCCCC, true);
+            ctx.drawText(client.textRenderer, t.label, ex, ey-9, 0xFFCCCCCC, true);
         }
 
         if (popupMenu != null) popupMenu.render(ctx, mouseX, mouseY);
@@ -186,15 +234,12 @@ public class HudEditorScreen extends Screen {
         dragTargets.add(new DragTarget(config.totemCounter, "Totem Counter", 60, 28));
     }
 
-    // ── 1.21.10 Mouse API — modifiers parameter added ─────────────────────────
+    // ── Internal mouse/key handlers called by Fabric events ──────────────────
 
-    @Override
-    public boolean mouseClicked(double mx, double my, int button, int modifiers) {
-        int x = (int) mx, y = (int) my;
-
+    private void onMouseClick(int x, int y, int button) {
         if (editMode) {
             if (popupMenu != null) {
-                if (popupMenu.mouseClicked(x, y, button)) return true;
+                if (popupMenu.mouseClicked(x, y, button)) return;
                 if (!popupMenu.isOver(x, y)) popupMenu = null;
             }
             if (button == 1) {
@@ -204,7 +249,7 @@ public class HudEditorScreen extends Screen {
                     if (x>=ex && x<=ex+t.boxW && y>=ey && y<=ey+t.boxH) {
                         popupMenu = new ElementPopupMenu(x, y, t.label, t.cfg);
                         popupMenu.clampToScreen(width, height);
-                        return true;
+                        return;
                     }
                 }
             } else if (button == 0) {
@@ -215,15 +260,13 @@ public class HudEditorScreen extends Screen {
                         dragging = t;
                         dragOffX = x - ex;
                         dragOffY = y - ey;
-                        return true;
+                        return;
                     }
                 }
             }
-            return false;
+            return;
         }
-
         handleSettingsClick(x, y);
-        return true;
     }
 
     private void handleSettingsClick(int x, int y) {
@@ -242,35 +285,17 @@ public class HudEditorScreen extends Screen {
         if (isOverBtn(BTN_RESET, x,y)) { config.resetToDefaults(); }
     }
 
-    @Override
-    public boolean mouseDragged(double mx, double my, int button, double dX, double dY, int modifiers) {
-        int x = (int) mx, y = (int) my;
-        if (popupMenu != null && popupMenu.mouseDragged(x, y, button)) return true;
+    private void onMouseDrag(int x, int y, int button) {
+        if (popupMenu != null && popupMenu.mouseDragged(x, y, button)) return;
         if (dragging != null) {
             dragging.cfg.xFraction = Math.max(0f, Math.min(1f, (float)(x-dragOffX)/width));
             dragging.cfg.yFraction = Math.max(0f, Math.min(1f, (float)(y-dragOffY)/height));
-            return true;
         }
-        return false;
     }
 
-    @Override
-    public boolean mouseReleased(double mx, double my, int button, int modifiers) {
+    private void onMouseRelease() {
         dragging = null;
         if (popupMenu != null) popupMenu.mouseReleased();
-        return true;
-    }
-
-    // ── 1.21.10 — keyPressed now takes KeyInput ───────────────────────────────
-    @Override
-    public boolean keyPressed(KeyInput input) {
-        if (input.keyCode() == GLFW.GLFW_KEY_ESCAPE && editMode) {
-            editMode  = false;
-            popupMenu = null;
-            dragTargets.clear();
-            return true;
-        }
-        return super.keyPressed(input);
     }
 
     @Override
@@ -285,4 +310,4 @@ public class HudEditorScreen extends Screen {
         int b = Math.min(255, ( argb     &0xFF)+amount);
         return (argb&0xFF000000)|(r<<16)|(g<<8)|b;
     }
-    }
+}
