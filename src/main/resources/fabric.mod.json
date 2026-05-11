@@ -1,12 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "hudmod",
-  "version": "${version}",
+  "version": "1.0.0",
   "name": "HudMod",
-  "description": "Mod created by NoTXGameR — Optimized HUD mod for PojavLauncher & low-end devices.",
-  "authors": [
-    "NoTXGameR"
-  ],
+  "description": "Mod created by NoTXGameR",
+  "authors": ["NoTXGameR"],
   "contact": {
     "sources": "https://github.com/notxgamer/hudmod"
   },
@@ -24,3 +22,4 @@
     "minecraft": "~1.21.10",
     "java": ">=21"
   }
+}
